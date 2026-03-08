@@ -1,0 +1,799 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>RAG Pipeline Simulator</title>
+<style>
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1d27;
+    --surface2: #22263a;
+    --border: #2e3354;
+    --accent: #6c63ff;
+    --accent2: #00d4aa;
+    --accent3: #ff6b6b;
+    --accent4: #f7c948;
+    --text: #e8eaf6;
+    --muted: #8892b0;
+    --chunk-colors: #6c63ff, #00d4aa, #ff6b6b, #f7c948, #a78bfa, #34d399;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    min-height: 100vh;
+  }
+
+  /* ── Header ── */
+  header {
+    background: linear-gradient(135deg, #1a1d27 0%, #12162a 100%);
+    border-bottom: 1px solid var(--border);
+    padding: 20px 40px;
+    display: flex; align-items: center; gap: 16px;
+  }
+  header .logo {
+    width: 42px; height: 42px;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px;
+  }
+  header h1 { font-size: 1.5rem; font-weight: 700; letter-spacing: -0.5px; }
+  header span { font-size: 0.85rem; color: var(--muted); margin-left: 4px; }
+
+  /* ── Layout ── */
+  .container { max-width: 1300px; margin: 0 auto; padding: 32px 24px; }
+
+  /* ── Phase Tabs ── */
+  .phases {
+    display: flex; gap: 8px; margin-bottom: 28px; flex-wrap: wrap;
+  }
+  .phase-btn {
+    padding: 10px 20px;
+    border-radius: 999px;
+    border: 1.5px solid var(--border);
+    background: var(--surface);
+    color: var(--muted);
+    cursor: pointer;
+    font-size: 0.85rem; font-weight: 600;
+    transition: all .2s;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .phase-btn.active {
+    border-color: var(--accent);
+    background: rgba(108,99,255,.18);
+    color: var(--text);
+  }
+  .phase-btn .dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--accent);
+  }
+  .phase-btn:nth-child(1) .dot { background: var(--accent); }
+  .phase-btn:nth-child(2) .dot { background: var(--accent2); }
+  .phase-btn:nth-child(3) .dot { background: var(--accent4); }
+  .phase-btn:nth-child(4) .dot { background: var(--accent3); }
+
+  /* ── Panel ── */
+  .panel { display: none; }
+  .panel.active { display: block; }
+
+  /* ── Cards ── */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 24px;
+    margin-bottom: 20px;
+  }
+  .card-header {
+    display: flex; align-items: center; gap: 12px; margin-bottom: 16px;
+  }
+  .card-icon {
+    width: 36px; height: 36px; border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px; flex-shrink: 0;
+  }
+  .card h2 { font-size: 1rem; font-weight: 700; }
+  .card p.desc { font-size: 0.83rem; color: var(--muted); margin-bottom: 16px; line-height: 1.6; }
+
+  /* ── Form elements ── */
+  textarea, input[type=text], select {
+    width: 100%;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    color: var(--text);
+    padding: 12px 14px;
+    font-size: 0.88rem; font-family: inherit;
+    resize: vertical;
+    outline: none;
+    transition: border-color .2s;
+  }
+  textarea:focus, input[type=text]:focus, select:focus {
+    border-color: var(--accent);
+  }
+  label { font-size: 0.8rem; color: var(--muted); font-weight: 600; display: block; margin-bottom: 6px; text-transform: uppercase; letter-spacing: .5px; }
+
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 11px 22px;
+    border-radius: 10px;
+    border: none; cursor: pointer;
+    font-size: 0.88rem; font-weight: 700;
+    transition: all .2s;
+  }
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-primary:hover { background: #7c75ff; transform: translateY(-1px); }
+  .btn-success { background: var(--accent2); color: #0f1117; }
+  .btn-success:hover { background: #00efc0; transform: translateY(-1px); }
+  .btn-warn { background: var(--accent4); color: #0f1117; }
+  .btn-warn:hover { filter: brightness(1.1); transform: translateY(-1px); }
+  .btn-danger { background: var(--accent3); color: #fff; }
+  .btn-danger:hover { filter: brightness(1.1); }
+  .btn:disabled { opacity: .45; cursor: not-allowed; transform: none !important; }
+
+  .btn-row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
+
+  /* ── Chunk display ── */
+  .chunks-grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px;
+    margin-top: 16px;
+  }
+  .chunk-card {
+    border-radius: 12px;
+    padding: 14px;
+    border-left: 4px solid;
+    background: var(--surface2);
+    position: relative;
+    overflow: hidden;
+  }
+  .chunk-card .chunk-id {
+    font-size: 0.72rem; font-weight: 800; letter-spacing: 1px;
+    text-transform: uppercase; opacity: .7; margin-bottom: 6px;
+  }
+  .chunk-card .chunk-text {
+    font-size: 0.82rem; line-height: 1.55; color: var(--text);
+  }
+  .chunk-card .chunk-badge {
+    display: inline-block;
+    font-size: 0.68rem; font-weight: 700; padding: 2px 7px;
+    border-radius: 5px; margin-top: 8px;
+    background: rgba(255,255,255,.08);
+  }
+
+  /* ── Vector viz ── */
+  .vector-row {
+    display: flex; align-items: center; gap: 10px; margin-bottom: 10px;
+    background: var(--surface2); border-radius: 10px; padding: 10px 14px;
+  }
+  .vector-label { font-size: 0.78rem; font-weight: 700; min-width: 70px; }
+  .vector-bars { display: flex; gap: 3px; flex: 1; }
+  .vector-bar {
+    height: 22px; border-radius: 4px; min-width: 4px;
+    transition: all .4s;
+  }
+  .vector-score {
+    font-size: 0.75rem; font-weight: 700; color: var(--accent2); min-width: 44px; text-align: right;
+  }
+
+  /* ── Similarity meter ── */
+  .sim-meter {
+    background: var(--surface2); border-radius: 10px; padding: 12px 16px; margin-bottom: 10px;
+    display: flex; align-items: center; gap: 14px;
+  }
+  .sim-label { font-size: 0.8rem; min-width: 90px; }
+  .sim-bar-wrap { flex: 1; background: var(--border); border-radius: 99px; height: 10px; }
+  .sim-bar { height: 10px; border-radius: 99px; transition: width .6s ease; }
+  .sim-val { font-size: 0.82rem; font-weight: 800; min-width: 40px; text-align: right; }
+
+  /* ── DB Table ── */
+  .db-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; margin-top: 10px; }
+  .db-table th {
+    background: var(--surface2); color: var(--muted);
+    padding: 10px 12px; text-align: left; font-weight: 700;
+    font-size: 0.75rem; text-transform: uppercase; letter-spacing: .5px;
+    border-bottom: 1px solid var(--border);
+  }
+  .db-table td { padding: 10px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  .db-table tr:hover td { background: rgba(255,255,255,.02); }
+  .db-table tr.highlight td { background: rgba(108,99,255,.15); }
+
+  /* ── Prompt box ── */
+  .prompt-box {
+    background: var(--surface2); border-radius: 12px; padding: 16px;
+    font-size: 0.82rem; line-height: 1.7; border: 1px solid var(--border);
+    white-space: pre-wrap; max-height: 280px; overflow-y: auto;
+  }
+  .prompt-box .tag-context { color: var(--accent2); font-weight: 700; }
+  .prompt-box .tag-query { color: var(--accent4); font-weight: 700; }
+  .prompt-box .tag-instruction { color: var(--accent3); font-weight: 700; }
+
+  /* ── Answer box ── */
+  .answer-box {
+    background: linear-gradient(135deg, rgba(108,99,255,.12), rgba(0,212,170,.08));
+    border: 1px solid var(--accent);
+    border-radius: 14px; padding: 20px;
+    font-size: 0.9rem; line-height: 1.75;
+    margin-top: 16px;
+  }
+  .answer-box .answer-header {
+    display: flex; align-items: center; gap: 10px;
+    margin-bottom: 12px;
+  }
+  .answer-box .answer-header span {
+    font-size: 0.75rem; font-weight: 700; color: var(--accent);
+    text-transform: uppercase; letter-spacing: 1px;
+  }
+
+  /* ── Flow diagram ── */
+  .flow {
+    display: flex; align-items: center; gap: 0; flex-wrap: wrap; margin: 16px 0;
+  }
+  .flow-step {
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 12px; padding: 12px 16px;
+    font-size: 0.8rem; font-weight: 600; text-align: center; min-width: 110px;
+    transition: all .3s;
+  }
+  .flow-step.done { border-color: var(--accent2); color: var(--accent2); }
+  .flow-step.active-step { border-color: var(--accent); color: var(--accent); background: rgba(108,99,255,.15); }
+  .flow-arrow { color: var(--muted); font-size: 1.2rem; padding: 0 6px; }
+
+  /* ── Info badge ── */
+  .info-badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: rgba(108,99,255,.15); border: 1px solid rgba(108,99,255,.35);
+    border-radius: 8px; padding: 8px 12px; font-size: 0.8rem; margin-top: 10px;
+  }
+
+  /* ── Legend ── */
+  .legend {
+    display: flex; gap: 14px; flex-wrap: wrap; margin-top: 12px;
+  }
+  .legend-item {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 0.78rem; color: var(--muted);
+  }
+  .legend-dot { width: 10px; height: 10px; border-radius: 50%; }
+
+  /* ── Step guide ── */
+  .step-guide {
+    background: var(--surface2); border-left: 3px solid var(--accent);
+    border-radius: 0 10px 10px 0; padding: 12px 16px;
+    font-size: 0.82rem; line-height: 1.6; color: var(--muted);
+    margin-bottom: 16px;
+  }
+  .step-guide strong { color: var(--text); }
+
+  /* ── Grid 2-col ── */
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  @media(max-width:700px) { .grid2 { grid-template-columns: 1fr; } }
+
+  /* ── Scrollbar ── */
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 99px; }
+
+  /* ── Badge pill ── */
+  .pill {
+    display: inline-block; padding: 3px 10px; border-radius: 99px;
+    font-size: 0.72rem; font-weight: 700;
+  }
+  .pill-purple { background: rgba(108,99,255,.25); color: #a78bfa; }
+  .pill-green  { background: rgba(0,212,170,.2);  color: var(--accent2); }
+  .pill-red    { background: rgba(255,107,107,.2); color: var(--accent3); }
+  .pill-yellow { background: rgba(247,201,72,.2);  color: var(--accent4); }
+
+  .note { font-size: 0.78rem; color: var(--muted); margin-top: 8px; line-height: 1.5; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">🔍</div>
+  <div>
+    <h1>RAG Pipeline Simulator <span>— Interactive Learning Tool</span></h1>
+  </div>
+</header>
+
+<div class="container">
+
+  <!-- Phase selector -->
+  <div class="phases">
+    <button class="phase-btn active" onclick="showPhase('ingest')"><span class="dot"></span> Phase 1: Ingestion</button>
+    <button class="phase-btn" onclick="showPhase('index')"><span class="dot"></span> Phase 2: Embedding & Index</button>
+    <button class="phase-btn" onclick="showPhase('retrieve')"><span class="dot"></span> Phase 3: Retrieval</button>
+    <button class="phase-btn" onclick="showPhase('generate')"><span class="dot"></span> Phase 4: Generation</button>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <!-- PHASE 1: INGESTION                                      -->
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <div class="panel active" id="panel-ingest">
+    <div class="step-guide">
+      <strong>📌 What happens here:</strong> Raw documents are collected and split into smaller, manageable pieces called <strong>chunks</strong>.
+      Each chunk is a semantically meaningful unit (sentence, paragraph) that the system can later retrieve independently.
+      This is <em>not</em> training data — the LLM's weights are never changed.
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <div class="card-icon" style="background:rgba(108,99,255,.2)">📄</div>
+        <div>
+          <h2>Document Source</h2>
+        </div>
+      </div>
+      <p class="desc">Paste any domain-specific text below (e.g. a company FAQ, a product manual, a policy document). This simulates your knowledge base.</p>
+      <label>Your Document</label>
+      <textarea id="doc-input" rows="7" placeholder="Paste your knowledge base text here...">Stockholm is the capital of Sweden and its largest city. It is built on 14 islands where Lake Mälaren meets the Baltic Sea.
+
+The city is known for its beautiful archipelago with over 30,000 islands. Stockholm has a humid continental climate with mild summers and cold winters.
+
+ABBA, the famous pop group, was formed in Stockholm in 1972. The ABBA Museum opened in 2013 on the island of Djurgården.
+
+Swedish cuisine includes meatballs (köttbullar), herring, crispbread, and lingonberry jam. Fika, a coffee break with pastries, is an important Swedish tradition.
+
+The Nobel Prize ceremony is held in Stockholm every December 10th. Alfred Nobel, the inventor of dynamite, established the prizes in his will of 1895.
+
+Karolinska Institute in Stockholm is one of the world's leading medical universities. It awards the Nobel Prize in Physiology or Medicine each year.</textarea>
+
+      <div class="btn-row">
+        <button class="btn btn-primary" onclick="chunkDocument()">✂️ Chunk Document</button>
+        <button class="btn btn-warn" onclick="resetAll()">🔄 Reset All</button>
+      </div>
+    </div>
+
+    <div class="card" id="chunk-result" style="display:none">
+      <div class="card-header">
+        <div class="card-icon" style="background:rgba(0,212,170,.2)">🧩</div>
+        <div><h2>Chunks Created</h2></div>
+      </div>
+      <p class="desc">Each paragraph has been split into a chunk with a unique ID. Chunk size affects retrieval precision — too large loses focus, too small loses context.</p>
+      <div class="chunks-grid" id="chunks-display"></div>
+      <div class="btn-row" style="margin-top:20px">
+        <button class="btn btn-success" onclick="showPhase('index'); embedChunks()">➡️ Next: Embed & Index</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <!-- PHASE 2: EMBEDDING & VECTOR INDEX                       -->
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <div class="panel" id="panel-index">
+    <div class="step-guide">
+      <strong>📌 What happens here:</strong> Each chunk is passed through an <strong>embedding model</strong> which converts text into a list of numbers (a vector).
+      Similar meanings → similar vectors. These vectors are stored in a <strong>Vector Database</strong>, enabling fast semantic search at query time.
+      The angle between two vectors (cosine similarity) measures how related they are — 1.0 = identical meaning, 0 = unrelated.
+    </div>
+
+    <div class="grid2">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-icon" style="background:rgba(247,201,72,.2)">🧮</div>
+          <div><h2>Embedding Model</h2></div>
+        </div>
+        <p class="desc">Each chunk is converted to a vector. Below is a simplified 8-dimension representation of each chunk's embedding — colour intensity shows each dimension's value.</p>
+        <div id="vector-display"></div>
+        <div class="legend">
+          <div class="legend-item"><div class="legend-dot" style="background:var(--accent)"></div> High value dimension</div>
+          <div class="legend-item"><div class="legend-dot" style="background:var(--border)"></div> Low value dimension</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-icon" style="background:rgba(255,107,107,.2)">🗄️</div>
+          <div><h2>Vector Database</h2></div>
+        </div>
+        <p class="desc">The vector database stores each chunk alongside its embedding. At query time, the nearest vectors to the query are retrieved using cosine similarity.</p>
+        <table class="db-table" id="db-table">
+          <thead>
+            <tr>
+              <th>Chunk ID</th>
+              <th>Preview</th>
+              <th>Dimensions</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody id="db-body"></tbody>
+        </table>
+        <div class="btn-row" style="margin-top:16px">
+          <button class="btn btn-success" onclick="showPhase('retrieve')">➡️ Next: Query & Retrieve</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <!-- PHASE 3: RETRIEVAL                                      -->
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <div class="panel" id="panel-retrieve">
+    <div class="step-guide">
+      <strong>📌 What happens here:</strong> The user's query is embedded using the <strong>same embedding model</strong> as the documents.
+      The query vector is compared to all stored chunk vectors using <strong>cosine similarity</strong>. The top-K most similar chunks are selected — these become the context for the LLM.
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <div class="card-icon" style="background:rgba(108,99,255,.2)">🔎</div>
+        <div><h2>User Query</h2></div>
+      </div>
+      <p class="desc">Type a question. It will be embedded and compared against all chunk vectors to find the most semantically relevant chunks.</p>
+      <label>Your Question</label>
+      <input type="text" id="query-input" value="Who founded the Nobel Prize and when does the ceremony happen?" placeholder="Ask anything about your document..."/>
+      <div class="btn-row">
+        <button class="btn btn-primary" onclick="performRetrieval()">🔍 Search Vector DB</button>
+        <button class="btn" style="background:var(--surface2);border:1px solid var(--border)" onclick="clearQuery()">Clear</button>
+      </div>
+    </div>
+
+    <div class="card" id="retrieval-result" style="display:none">
+      <div class="card-header">
+        <div class="card-icon" style="background:rgba(0,212,170,.2)">📊</div>
+        <div><h2>Cosine Similarity Scores</h2></div>
+      </div>
+      <p class="desc">The query vector is compared to each chunk vector. Chunks with the highest similarity score are retrieved as context. The top 2 are highlighted.</p>
+      <div id="similarity-display"></div>
+
+      <div style="margin-top:20px">
+        <div class="card-header">
+          <div class="card-icon" style="background:rgba(247,201,72,.2)">🏆</div>
+          <div><h2>Retrieved Chunks (Top-K)</h2></div>
+        </div>
+        <div class="chunks-grid" id="retrieved-chunks"></div>
+      </div>
+      <div class="btn-row" style="margin-top:16px">
+        <button class="btn btn-success" onclick="showPhase('generate'); buildPrompt()">➡️ Next: Generate Answer</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <!-- PHASE 4: GENERATION                                     -->
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <div class="panel" id="panel-generate">
+    <div class="step-guide">
+      <strong>📌 What happens here:</strong> The retrieved chunks are injected into a <strong>prompt template</strong> alongside the user's query.
+      This augmented prompt is sent to the LLM. The LLM generates a grounded answer using <em>only</em> the provided context — not its general knowledge.
+      This prevents hallucinations and keeps answers factual.
+    </div>
+
+    <div class="flow" id="pipeline-flow">
+      <div class="flow-step done">📄 Document</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step done">✂️ Chunk</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step done">🧮 Embed</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step done">🗄️ Vector DB</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step done">🔍 Retrieve</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step active-step">⚡ Generate</div>
+    </div>
+
+    <div class="grid2">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-icon" style="background:rgba(247,201,72,.2)">📋</div>
+          <div><h2>Augmented Prompt</h2></div>
+        </div>
+        <p class="desc">This is what actually gets sent to the LLM. Notice how the retrieved chunks are injected as context <em>before</em> the user question — this is the "Augmented" part of RAG.</p>
+        <div class="prompt-box" id="prompt-display">Run retrieval first...</div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-icon" style="background:rgba(108,99,255,.2)">🤖</div>
+          <div><h2>LLM Response</h2></div>
+        </div>
+        <p class="desc">The LLM generates an answer grounded in the retrieved context. In a real system, this calls an API (OpenAI, Gemini, etc.). Here we simulate the logic.</p>
+        <button class="btn btn-primary" id="gen-btn" onclick="generateAnswer()">⚡ Generate Answer</button>
+        <div class="answer-box" id="answer-display" style="display:none">
+          <div class="answer-header">
+            <span>🤖 LLM Answer</span>
+            <span class="pill pill-green">Grounded in context</span>
+          </div>
+          <div id="answer-text"></div>
+        </div>
+        <div class="info-badge" style="margin-top:14px">
+          💡 <span>The LLM's model weights are <strong>never modified</strong>. RAG ≠ Fine-tuning.</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:0">
+      <div class="card-header">
+        <div class="card-icon" style="background:rgba(0,212,170,.2)">📚</div>
+        <div><h2>Key Concepts Summary</h2></div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px;margin-top:4px">
+        <div style="background:var(--surface2);border-radius:12px;padding:14px">
+          <div style="font-size:1.4rem;margin-bottom:8px">✂️</div>
+          <div style="font-weight:700;font-size:0.88rem;margin-bottom:4px">Chunking</div>
+          <div class="note">Splits documents into retrievable units. Typical size: 256–1024 tokens.</div>
+        </div>
+        <div style="background:var(--surface2);border-radius:12px;padding:14px">
+          <div style="font-size:1.4rem;margin-bottom:8px">🧮</div>
+          <div style="font-weight:700;font-size:0.88rem;margin-bottom:4px">Embeddings</div>
+          <div class="note">Semantic vector representation. Models: text-embedding-3, BGE, E5.</div>
+        </div>
+        <div style="background:var(--surface2);border-radius:12px;padding:14px">
+          <div style="font-size:1.4rem;margin-bottom:8px">🗄️</div>
+          <div style="font-weight:700;font-size:0.88rem;margin-bottom:4px">Vector DB</div>
+          <div class="note">Stores & searches vectors. Examples: Pinecone, Weaviate, pgvector, ChromaDB.</div>
+        </div>
+        <div style="background:var(--surface2);border-radius:12px;padding:14px">
+          <div style="font-size:1.4rem;margin-bottom:8px">📐</div>
+          <div style="font-weight:700;font-size:0.88rem;margin-bottom:4px">Cosine Similarity</div>
+          <div class="note">Measures angle between vectors. Range: 0 (unrelated) → 1.0 (identical meaning).</div>
+        </div>
+        <div style="background:var(--surface2);border-radius:12px;padding:14px">
+          <div style="font-size:1.4rem;margin-bottom:8px">🔍</div>
+          <div style="font-weight:700;font-size:0.88rem;margin-bottom:4px">Top-K Retrieval</div>
+          <div class="note">Only the K most similar chunks are passed to the LLM to limit context size.</div>
+        </div>
+        <div style="background:var(--surface2);border-radius:12px;padding:14px">
+          <div style="font-size:1.4rem;margin-bottom:8px">⚡</div>
+          <div style="font-weight:700;font-size:0.88rem;margin-bottom:4px">Prompt Augmentation</div>
+          <div class="note">Context + query → one prompt. LLM weights unchanged. No retraining needed.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /container -->
+
+<script>
+// ── State ──────────────────────────────────────────────────────
+let chunks = [];
+let embeddings = [];
+let topChunks = [];
+let lastQuery = '';
+
+const CHUNK_COLORS = ['#6c63ff','#00d4aa','#ff6b6b','#f7c948','#a78bfa','#34d399','#60a5fa','#f472b6'];
+
+// ── Navigation ─────────────────────────────────────────────────
+function showPhase(id) {
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.phase-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('panel-' + id).classList.add('active');
+  const idx = {ingest:0,index:1,retrieve:2,generate:3}[id];
+  document.querySelectorAll('.phase-btn')[idx].classList.add('active');
+}
+
+// ── Phase 1: Chunking ──────────────────────────────────────────
+function chunkDocument() {
+  const text = document.getElementById('doc-input').value.trim();
+  if (!text) return alert('Please paste some document text first.');
+
+  // Split by double newline (paragraphs)
+  const raw = text.split(/\n\s*\n/).map(s => s.trim()).filter(s => s.length > 20);
+  chunks = raw.map((t, i) => ({ id: `CHUNK-${String(i+1).padStart(3,'0')}`, text: t, tokens: Math.ceil(t.split(' ').length * 1.3) }));
+
+  const grid = document.getElementById('chunks-display');
+  grid.innerHTML = '';
+  chunks.forEach((c, i) => {
+    const col = CHUNK_COLORS[i % CHUNK_COLORS.length];
+    grid.innerHTML += `
+      <div class="chunk-card" style="border-left-color:${col}">
+        <div class="chunk-id" style="color:${col}">${c.id}</div>
+        <div class="chunk-text">${c.text.substring(0,140)}${c.text.length>140?'…':''}</div>
+        <span class="chunk-badge">~${c.tokens} tokens</span>
+      </div>`;
+  });
+
+  document.getElementById('chunk-result').style.display = 'block';
+  embeddings = generateEmbeddings(chunks);
+}
+
+// ── Phase 2: Fake Embeddings ───────────────────────────────────
+// Deterministic pseudo-embedding based on char codes
+function textToVector(text, dims=8) {
+  const vec = new Array(dims).fill(0);
+  for (let i = 0; i < text.length; i++) {
+    vec[i % dims] += (text.charCodeAt(i) / 128);
+  }
+  // Normalize
+  const mag = Math.sqrt(vec.reduce((s,v) => s + v*v, 0));
+  return vec.map(v => Math.abs(v / mag));
+}
+
+function cosineSim(a, b) {
+  let dot = 0, ma = 0, mb = 0;
+  for (let i = 0; i < a.length; i++) { dot += a[i]*b[i]; ma += a[i]*a[i]; mb += b[i]*b[i]; }
+  return dot / (Math.sqrt(ma) * Math.sqrt(mb));
+}
+
+// Boost similarity for chunks containing query keywords
+function smartSim(chunk, query) {
+  const base = cosineSim(textToVector(chunk.text), textToVector(query));
+  const words = query.toLowerCase().split(/\W+/).filter(w => w.length > 3);
+  const matches = words.filter(w => chunk.text.toLowerCase().includes(w)).length;
+  const boost = matches * 0.08;
+  return Math.min(0.98, base + boost);
+}
+
+function generateEmbeddings(chks) {
+  return chks.map(c => ({ chunkId: c.id, vec: textToVector(c.text) }));
+}
+
+function embedChunks() {
+  if (chunks.length === 0) {
+    document.getElementById('vector-display').innerHTML = '<p class="note">Please chunk a document first (Phase 1).</p>';
+    return;
+  }
+  // Vector bars
+  const vd = document.getElementById('vector-display');
+  vd.innerHTML = '';
+  chunks.forEach((c, i) => {
+    const col = CHUNK_COLORS[i % CHUNK_COLORS.length];
+    const vec = embeddings[i].vec;
+    const bars = vec.map(v => `<div class="vector-bar" style="width:${Math.round(v*60+6)}px;background:${col};opacity:${0.4+v*0.6}"></div>`).join('');
+    vd.innerHTML += `
+      <div class="vector-row">
+        <div class="vector-label" style="color:${col}">${c.id}</div>
+        <div class="vector-bars">${bars}</div>
+        <div class="vector-score">[8-dim]</div>
+      </div>`;
+  });
+
+  // DB table
+  const tbody = document.getElementById('db-body');
+  tbody.innerHTML = '';
+  chunks.forEach((c, i) => {
+    const col = CHUNK_COLORS[i % CHUNK_COLORS.length];
+    const vec = embeddings[i].vec.map(v => v.toFixed(2));
+    tbody.innerHTML += `
+      <tr>
+        <td><span style="color:${col};font-weight:700">${c.id}</span></td>
+        <td>${c.text.substring(0,50)}…</td>
+        <td style="font-family:monospace;font-size:0.72rem;color:var(--muted)">[${vec.slice(0,4).join(', ')}, …]</td>
+        <td><span class="pill pill-green">✓ Indexed</span></td>
+      </tr>`;
+  });
+}
+
+// ── Phase 3: Retrieval ─────────────────────────────────────────
+function performRetrieval() {
+  if (chunks.length === 0) return alert('Please complete Phase 1 (Chunking) first.');
+  const query = document.getElementById('query-input').value.trim();
+  if (!query) return alert('Please enter a query.');
+  lastQuery = query;
+
+  // Score each chunk
+  const scored = chunks.map((c, i) => ({
+    chunk: c, idx: i,
+    sim: smartSim(c, query)
+  })).sort((a,b) => b.sim - a.sim);
+
+  // Similarity meters
+  const sd = document.getElementById('similarity-display');
+  sd.innerHTML = '';
+  scored.forEach((s, rank) => {
+    const col = CHUNK_COLORS[s.idx % CHUNK_COLORS.length];
+    const pct = (s.sim * 100).toFixed(1);
+    const isTop = rank < 2;
+    sd.innerHTML += `
+      <div class="sim-meter" style="${isTop ? 'border:1px solid '+col+';border-radius:10px' : ''}">
+        <div class="sim-label" style="color:${col};font-weight:${isTop?'800':'600'}">${s.chunk.id} ${isTop ? '🏆' : ''}</div>
+        <div class="sim-bar-wrap">
+          <div class="sim-bar" style="width:${pct}%;background:${col}"></div>
+        </div>
+        <div class="sim-val" style="color:${col}">${pct}%</div>
+      </div>`;
+  });
+
+  // Top 2 retrieved chunks
+  topChunks = scored.slice(0, 2);
+  const rc = document.getElementById('retrieved-chunks');
+  rc.innerHTML = '';
+  topChunks.forEach((s, r) => {
+    const col = CHUNK_COLORS[s.idx % CHUNK_COLORS.length];
+    rc.innerHTML += `
+      <div class="chunk-card" style="border-left-color:${col};border:1px solid ${col}40">
+        <div class="chunk-id" style="color:${col}">Rank #${r+1} — ${s.chunk.id} <span class="pill pill-green">${(s.sim*100).toFixed(1)}% match</span></div>
+        <div class="chunk-text">${s.chunk.text}</div>
+      </div>`;
+  });
+
+  // Highlight DB table
+  document.querySelectorAll('#db-body tr').forEach((row, i) => {
+    row.classList.remove('highlight');
+    if (topChunks.find(t => t.chunk.id === chunks[i]?.id)) row.classList.add('highlight');
+  });
+
+  document.getElementById('retrieval-result').style.display = 'block';
+}
+
+function clearQuery() {
+  document.getElementById('query-input').value = '';
+  document.getElementById('retrieval-result').style.display = 'none';
+}
+
+// ── Phase 4: Generation ────────────────────────────────────────
+function buildPrompt() {
+  if (topChunks.length === 0) {
+    document.getElementById('prompt-display').innerHTML = 'Please complete Phase 3 (Retrieval) first.';
+    return;
+  }
+  const context = topChunks.map((t,i) => `[Context ${i+1}]: ${t.chunk.text}`).join('\n\n');
+  document.getElementById('prompt-display').innerHTML =
+    `<span class="tag-instruction">### SYSTEM INSTRUCTION ###</span>
+You are a helpful assistant. Answer the user's question using ONLY the provided context below.
+Do not use external knowledge. If the answer is not in the context, say so.
+
+<span class="tag-context">### RETRIEVED CONTEXT ###</span>
+${context}
+
+<span class="tag-query">### USER QUESTION ###</span>
+${lastQuery}
+
+<span class="tag-instruction">### GENERATE ANSWER BELOW ###</span>`;
+}
+
+function generateAnswer() {
+  if (topChunks.length === 0) return alert('Please complete Phase 3 (Retrieval) first.');
+  const btn = document.getElementById('gen-btn');
+  btn.disabled = true;
+  btn.textContent = '⏳ Generating…';
+
+  setTimeout(() => {
+    // Simulated answer from context
+    const allContext = topChunks.map(t => t.chunk.text).join(' ');
+    const answer = simulateAnswer(lastQuery, allContext);
+    document.getElementById('answer-text').innerHTML = answer;
+    document.getElementById('answer-display').style.display = 'block';
+    btn.disabled = false;
+    btn.textContent = '⚡ Regenerate';
+  }, 1200);
+}
+
+function simulateAnswer(query, context) {
+  // Keyword-based simulated answer for the default example
+  const q = query.toLowerCase();
+  if (q.includes('nobel') || q.includes('ceremony')) {
+    return `Based on the retrieved context:<br><br>
+The <strong>Nobel Prize</strong> was established by <strong>Alfred Nobel</strong>, the inventor of dynamite, through his will written in <strong>1895</strong>. The ceremony is held every year on <strong>December 10th</strong> in Stockholm.<br><br>
+The <strong>Karolinska Institute</strong> in Stockholm specifically awards the Nobel Prize in Physiology or Medicine each year.<br><br>
+<span class="pill pill-purple">📌 Source: CHUNK-005, CHUNK-006</span>`;
+  }
+  if (q.includes('abba') || q.includes('music') || q.includes('pop')) {
+    return `Based on the retrieved context:<br><br>
+<strong>ABBA</strong>, the famous Swedish pop group, was formed in <strong>Stockholm in 1972</strong>. The <strong>ABBA Museum</strong> opened in <strong>2013</strong> on the island of Djurgården in Stockholm.<br><br>
+<span class="pill pill-purple">📌 Source: CHUNK-003</span>`;
+  }
+  if (q.includes('food') || q.includes('cuisine') || q.includes('eat') || q.includes('fika')) {
+    return `Based on the retrieved context:<br><br>
+Swedish cuisine includes <strong>meatballs (köttbullar)</strong>, herring, crispbread, and lingonberry jam. An important cultural tradition is <strong>Fika</strong> — a coffee break with pastries that is central to Swedish social life.<br><br>
+<span class="pill pill-purple">📌 Source: CHUNK-004</span>`;
+  }
+  if (q.includes('climate') || q.includes('weather') || q.includes('island') || q.includes('archipelago')) {
+    return `Based on the retrieved context:<br><br>
+Stockholm is known for its beautiful <strong>archipelago with over 30,000 islands</strong>. The city has a <strong>humid continental climate</strong> with mild summers and cold winters.<br><br>
+<span class="pill pill-purple">📌 Source: CHUNK-002</span>`;
+  }
+  // Generic answer from context
+  const sentences = context.split(/[.!?]/).filter(s => s.trim().length > 20).slice(0, 3);
+  return `Based on the retrieved context:<br><br>
+${sentences.join('. ')}.<br><br>
+<span class="pill pill-purple">📌 Source: ${topChunks.map(t=>t.chunk.id).join(', ')}</span>
+<br><br><span class="note">💡 Try asking specifically about Nobel Prize, ABBA, Stockholm climate, or Swedish food for best results with the sample document.</span>`;
+}
+
+// ── Reset ──────────────────────────────────────────────────────
+function resetAll() {
+  chunks = []; embeddings = []; topChunks = []; lastQuery = '';
+  document.getElementById('chunk-result').style.display = 'none';
+  document.getElementById('vector-display').innerHTML = '';
+  document.getElementById('db-body').innerHTML = '';
+  document.getElementById('retrieval-result').style.display = 'none';
+  document.getElementById('answer-display').style.display = 'none';
+  document.getElementById('prompt-display').textContent = 'Run retrieval first...';
+  showPhase('ingest');
+}
+</script>
+</body>
+</html>
